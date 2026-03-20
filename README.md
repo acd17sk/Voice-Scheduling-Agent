@@ -123,6 +123,3 @@ If you ever need to change these calendars after setup, simply edit the `GOOGLE_
 
 ### Webhook Security
 During setup, `init.py` generated a cryptographically secure `VAPI_WEBHOOK_SECRET` and registered it with your Vapi assistant. Your backend (`main.py`) validates this secret on every incoming request. If an attacker discovers your backend URL and tries to send fake meeting requests, the server will block them with a `401 Unauthorized` response.
-
-## License
-MIT
