@@ -84,7 +84,8 @@ def main():
             data=json.dumps(assistant_payload).encode("utf-8"),
             headers={
                 "Authorization": f"Bearer {vapi_api_key}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (compatible; NovaSetup/1.0)"
             },
             method="POST"
         )
