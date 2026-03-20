@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nova — Voice Scheduling Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0b0c0f;
+      --surface: #141519;
+      --surface-2: #1c1d24;
+      --border: #2a2b33;
+      --text: #e8e6e1;
+      --text-dim: #8a8990;
+      --accent: #7df59e;
+      --accent-glow: rgba(125, 245, 158, 0.15);
+      --coral: #f5867d;
+      --amber: #f5c87d;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Grain overlay ─────────────────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      pointer-events: none;
+      opacity: 0.03;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-size: 128px;
+    }
+
+    /* ── Ambient gradient blobs ───────────────────────────────── */
+    .ambient {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .ambient .blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.35;
+    }
+    .blob-1 { width: 600px; height: 600px; background: var(--accent); top: -200px; left: -100px; opacity: 0.12; }
+    .blob-2 { width: 500px; height: 500px; background: var(--coral); bottom: -150px; right: -100px; opacity: 0.08; }
+    .blob-3 { width: 300px; height: 300px; background: var(--amber); top: 40%; left: 60%; opacity: 0.06; }
+
+    /* ── Layout ────────────────────────────────────────────────── */
+    .wrapper {
+      position: relative;
+      z-index: 1;
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 4rem;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Nav ───────────────────────────────────────────────────── */
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 4rem;
+    }
+    .logo {
+      font-family: 'Instrument Serif', serif;
+      font-size: 1.6rem;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+    .logo span { color: var(--accent); }
+    .nav-pill {
+      font-size: 0.75rem;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 0.45rem 1rem;
+      border-radius: 100px;
+    }
+
+    /* ── Hero ──────────────────────────────────────────────────── */
+    .hero {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 2rem;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--accent);
+      background: var(--accent-glow);
+      border: 1px solid rgba(125, 245, 158, 0.2);
+      padding: 0.4rem 1rem;
+      border-radius: 100px;
+      animation: fadeInDown 0.8s ease both;
+    }
+    .hero-badge .dot {
+      width: 6px; height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: pulse 2s ease infinite;
+    }
+    .hero h1 {
+      font-family: 'Instrument Serif', serif;
+      font-size: clamp(2.8rem, 7vw, 5.2rem);
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      font-weight: 400;
+      max-width: 700px;
+      animation: fadeInUp 0.8s 0.15s ease both;
+    }
+    .hero h1 em {
+      font-style: italic;
+      color: var(--accent);
+    }
+    .hero p {
+      font-size: 1.1rem;
+      line-height: 1.6;
+      color: var(--text-dim);
+      max-width: 480px;
+      animation: fadeInUp 0.8s 0.3s ease both;
+    }
+
+    /* ── Call Button ───────────────────────────────────────────── */
+    .call-btn {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      padding: 1.1rem 2.4rem;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--bg);
+      background: var(--accent);
+      border: none;
+      border-radius: 100px;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.3s;
+      animation: fadeInUp 0.8s 0.45s ease both;
+    }
+    .call-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 40px var(--accent-glow), 0 0 0 1px var(--accent);
+    }
+    .call-btn:active { transform: scale(0.97); }
+    .call-btn.active {
+      background: var(--coral);
+      animation: none;
+    }
+    .call-btn .icon {
+      width: 20px; height: 20px;
+      transition: transform 0.3s;
+    }
+    .call-btn:hover .icon { transform: scale(1.1); }
+
+    /* ── Waveform (visible when call active) ──────────────────── */
+    .waveform {
+      display: none;
+      align-items: center;
+      gap: 3px;
+      height: 32px;
+      margin-top: 1rem;
+      animation: fadeInUp 0.4s ease both;
+    }
+    .waveform.visible { display: flex; }
+    .waveform .bar {
+      width: 3px;
+      background: var(--accent);
+      border-radius: 2px;
+      animation: wave 1.2s ease-in-out infinite;
+    }
+    .waveform .bar:nth-child(1) { height: 8px;  animation-delay: 0s; }
+    .waveform .bar:nth-child(2) { height: 18px; animation-delay: 0.15s; }
+    .waveform .bar:nth-child(3) { height: 28px; animation-delay: 0.3s; }
+    .waveform .bar:nth-child(4) { height: 18px; animation-delay: 0.45s; }
+    .waveform .bar:nth-child(5) { height: 8px;  animation-delay: 0.6s; }
+
+    /* ── Status text ──────────────────────────────────────────── */
+    .status {
+      font-size: 0.85rem;
+      color: var(--text-dim);
+      min-height: 1.4em;
+      margin-top: 0.5rem;
+      transition: opacity 0.3s;
+    }
+
+    /* ── Features strip ───────────────────────────────────────── */
+    .features {
+      display: flex;
+      justify-content: center;
+      gap: 2.5rem;
+      margin-top: 4rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--border);
+      animation: fadeInUp 0.8s 0.6s ease both;
+    }
+    .feature {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.82rem;
+      color: var(--text-dim);
+    }
+    .feature-icon {
+      width: 32px; height: 32px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .feature-icon svg { width: 16px; height: 16px; stroke: var(--accent); fill: none; }
+
+    /* ── Transcript panel ─────────────────────────────────────── */
+    .transcript-panel {
+      display: none;
+      margin-top: 2rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.2rem 1.5rem;
+      max-width: 520px;
+      width: 100%;
+      align-self: center;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .transcript-panel.visible { display: block; }
+    .transcript-panel h3 {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-dim);
+      margin-bottom: 0.8rem;
+    }
+    .transcript-line {
+      font-size: 0.85rem;
+      line-height: 1.5;
+      color: var(--text);
+      padding: 0.3rem 0;
+    }
+    .transcript-line .role {
+      font-weight: 600;
+      color: var(--accent);
+    }
+    .transcript-line .role.user { color: var(--amber); }
+
+    /* ── Animations ────────────────────────────────────────────── */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeInDown {
+      from { opacity: 0; transform: translateY(-12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: 0.4; }
+    }
+    @keyframes wave {
+      0%, 100% { transform: scaleY(0.4); }
+      50%      { transform: scaleY(1); }
+    }
+
+    /* ── Responsive ────────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      .features { flex-direction: column; align-items: center; gap: 1rem; }
+      nav { margin-bottom: 2rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="ambient">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+
+  <div class="wrapper">
+    <!-- Nav -->
+    <nav>
+      <div class="logo">nova<span>.</span></div>
+      <div class="nav-pill">Voice Scheduler</div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="hero-badge">
+        <span class="dot"></span>
+        Agent Online
+      </div>
+
+      <h1>Schedule meetings<br/>with your <em>voice</em></h1>
+
+      <p>
+        Talk to Nova, your AI scheduling assistant.
+        She'll collect the details and book it straight
+        onto your Google Calendar.
+      </p>
+
+      <button class="call-btn" id="callBtn" onclick="toggleCall()">
+        <svg class="icon" id="btnIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.362 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
+        </svg>
+        <span id="btnLabel">Start Call</span>
+      </button>
+
+      <div class="waveform" id="waveform">
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+      </div>
+
+      <div class="status" id="status"></div>
+
+      <!-- Live transcript -->
+      <div class="transcript-panel" id="transcriptPanel">
+        <h3>Live Transcript</h3>
+        <div id="transcriptBody"></div>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+          </svg>
+        </div>
+        30-second booking
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+          </svg>
+        </div>
+        Google Calendar sync
+      </div>
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </div>
+        Private & secure
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       Vapi Web SDK
+       ═══════════════════════════════════════════════════════════ -->
+  <script src="https://cdn.jsdelivr.net/npm/@vapi-ai/web@latest/dist/vapi.min.js"></script>
+  <script>
+    // ── Configuration ────────────────────────────────────────────
+    // Replace these with your actual keys from the Vapi dashboard
+    const VAPI_PUBLIC_KEY = "YOUR_VAPI_PUBLIC_KEY";
+    const VAPI_ASSISTANT_ID = "YOUR_VAPI_ASSISTANT_ID";
+
+    // ── State ────────────────────────────────────────────────────
+    let vapi = null;
+    let isCallActive = false;
+
+    // ── DOM refs ─────────────────────────────────────────────────
+    const callBtn = document.getElementById("callBtn");
+    const btnLabel = document.getElementById("btnLabel");
+    const btnIcon = document.getElementById("btnIcon");
+    const waveform = document.getElementById("waveform");
+    const statusEl = document.getElementById("status");
+    const transcriptPanel = document.getElementById("transcriptPanel");
+    const transcriptBody = document.getElementById("transcriptBody");
+
+    // ── Initialize Vapi ──────────────────────────────────────────
+    function initVapi() {
+      if (vapi) return;
+      vapi = new window.Vapi(VAPI_PUBLIC_KEY);
+
+      vapi.on("call-start", () => {
+        setActive(true);
+        setStatus("Connected — Nova is listening…");
+      });
+
+      vapi.on("call-end", () => {
+        setActive(false);
+        setStatus("Call ended. Click to start a new one.");
+      });
+
+      vapi.on("speech-start", () => {
+        setStatus("Nova is speaking…");
+      });
+
+      vapi.on("speech-end", () => {
+        setStatus("Listening…");
+      });
+
+      vapi.on("message", (msg) => {
+        if (msg.type === "transcript") {
+          addTranscript(msg.role, msg.transcript);
+        }
+      });
+
+      vapi.on("error", (err) => {
+        console.error("Vapi error:", err);
+        setStatus("An error occurred. Please try again.");
+        setActive(false);
+      });
+    }
+
+    // ── Toggle Call ──────────────────────────────────────────────
+    async function toggleCall() {
+      initVapi();
+
+      if (isCallActive) {
+        vapi.stop();
+        setActive(false);
+      } else {
+        setStatus("Connecting…");
+        try {
+          const callerTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          await vapi.start(VAPI_ASSISTANT_ID, {
+            variableValues: { timezone: callerTimezone },
+          });
+        } catch (e) {
+          console.error("Failed to start:", e);
+          setStatus("Failed to connect. Check your config.");
+        }
+      }
+    }
+
+    // ── UI Helpers ───────────────────────────────────────────────
+    function setActive(active) {
+      isCallActive = active;
+      callBtn.classList.toggle("active", active);
+      btnLabel.textContent = active ? "End Call" : "Start Call";
+      waveform.classList.toggle("visible", active);
+      transcriptPanel.classList.toggle("visible", active);
+
+      if (active) {
+        btnIcon.innerHTML = `<rect x="6" y="6" width="12" height="12" rx="1"/>`;
+      } else {
+        btnIcon.innerHTML = `<path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.362 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0122 16.92z"/>`;
+      }
+    }
+
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    function addTranscript(role, text) {
+      if (!text || !text.trim()) return;
+      const line = document.createElement("div");
+      line.className = "transcript-line";
+      const label = role === "user" ? "You" : "Nova";
+      const roleClass = role === "user" ? "user" : "assistant";
+      line.innerHTML = `<span class="role ${roleClass}">${label}:</span> ${text}`;
+      transcriptBody.appendChild(line);
+      transcriptPanel.scrollTop = transcriptPanel.scrollHeight;
+    }
+  </script>
+
+</body>
+</html>

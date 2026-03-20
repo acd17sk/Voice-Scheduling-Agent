@@ -1,0 +1,78 @@
+{
+  "name": "Scheduling Assistant",
+  "model": {
+    "provider": "groq",
+    "model": "llama-3.3-70b-versatile",
+    "temperature": 0.4,
+    "systemPrompt": "You are a friendly, professional scheduling assistant named Nova. Your job is to help callers book meetings on their calendar.\n\n## Caller Context\nThe caller is located in the {{timezone}} timezone. Always assume dates and times they give are relative to that timezone. When calling functions, pass the timezone parameter as '{{timezone}}'.\n\n## Conversation Flow\n1. **Greet** the caller warmly and ask for their name.\n2. Ask what **date and time** they'd like to schedule the meeting.\n3. Optionally ask for a **meeting title** (if they don't provide one, use 'Meeting with [Name]').\n4. **Confirm** all the details back to the caller clearly.\n5. Once confirmed, call the `schedule_meeting` function to book it.\n6. Tell the caller the meeting has been booked and wish them a great day.\n\n## Rules\n- Keep responses short and conversational (1-2 sentences).\n- Always confirm the full date, time, and title before scheduling.\n- If the caller says a relative date like 'tomorrow' or 'next Monday', resolve it relative to today.\n- If anything is unclear, ask a clarifying question.\n- Be warm, efficient, and human — not robotic.\n- Default meeting duration is 30 minutes unless told otherwise."
+  },
+  "voice": {
+    "provider": "11labs",
+    "voiceId": "21m00Tcm4TlvDq8ikWAM"
+  },
+  "functions": [
+    {
+      "name": "schedule_meeting",
+      "description": "Create a calendar event once the user has confirmed all meeting details.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The caller's name"
+          },
+          "date_time": {
+            "type": "string",
+            "description": "The date and time for the meeting in ISO 8601 format or natural language (e.g., '2025-01-15T14:00:00' or 'January 15 2025 at 2pm')"
+          },
+          "title": {
+            "type": "string",
+            "description": "Optional meeting title. If not provided, defaults to 'Meeting with [name]'"
+          },
+          "duration_minutes": {
+            "type": "integer",
+            "description": "Meeting duration in minutes. Defaults to 30."
+          },
+          "timezone": {
+            "type": "string",
+            "description": "The caller's IANA timezone (e.g. 'America/New_York'). Use the value from {{timezone}}."
+          }
+        },
+        "required": ["name", "date_time"]
+      }
+    },
+    {
+      "name": "check_availability",
+      "description": "Check if a particular time slot is available on the calendar.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "date_time": {
+            "type": "string",
+            "description": "The date and time to check availability for."
+          },
+          "duration_minutes": {
+            "type": "integer",
+            "description": "Duration in minutes to check (default 30)."
+          },
+          "timezone": {
+            "type": "string",
+            "description": "The caller's IANA timezone (e.g. 'America/New_York'). Use the value from {{timezone}}."
+          }
+        },
+        "required": ["date_time"]
+      }
+    }
+  ],
+  "serverUrl": "YOUR_BACKEND_URL/vapi/webhook",
+  "firstMessage": "Hey there! I'm Nova, your scheduling assistant. I'd love to help you book a meeting. What's your name?",
+  "endCallMessage": "Your meeting is all set! Have a wonderful day. Goodbye!",
+  "transcriber": {
+    "provider": "deepgram",
+    "model": "nova-2",
+    "language": "en"
+  },
+  "silenceTimeoutSeconds": 30,
+  "maxDurationSeconds": 300,
+  "endCallFunctionEnabled": true
+}
