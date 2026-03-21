@@ -14,7 +14,13 @@ import pytest
 import pytz
 from fastapi.testclient import TestClient
 
-from main import app, create_calendar_event, check_calendar_availability
+from main import (
+    app, 
+    create_calendar_event, 
+    check_calendar_availability,
+    reschedule_calendar_event,
+    cancel_calendar_event
+)
 
 
 client = TestClient(app)
@@ -70,6 +76,17 @@ def _build_mock_service(insert_side_effect=None, freebusy_response=None):
         mock_freebusy_req = MagicMock()
         mock_freebusy_req.execute.return_value = freebusy_response
         mock_service.freebusy.return_value.query.return_value = mock_freebusy_req
+
+    # Mock events().patch().execute()
+    mock_service.events.return_value.patch.return_value.execute.return_value = {
+        "id": "test_event_123",
+        "htmlLink": "https://calendar.google.com/event?id=test_event_123",
+        "start": {"dateTime": "2025-06-16T14:00:00-04:00"},
+        "end": {"dateTime": "2025-06-16T14:30:00-04:00"},
+    }
+
+    # Mock events().delete().execute()
+    mock_service.events.return_value.delete.return_value.execute.return_value = ""
 
     return mock_service
 
@@ -367,8 +384,74 @@ class TestCheckCalendarAvailability:
         assert "Freebusy API error" in result["error"]
 
 
+# ── Tests: Meeting Management ────────────────────────────────────────────────
+
+class TestMeetingManagement:
+    """Test reschedule_calendar_event and cancel_calendar_event."""
+
+    @patch("main.get_calendar_service")
+    def test_reschedule_success(self, mock_get_service):
+        mock_get_service.return_value = _build_mock_service()
+
+        result = reschedule_calendar_event(
+            event_id="test_event_123",
+            new_date_time="2025-06-16T14:00:00",
+        )
+
+        assert result["success"] is True
+        assert result["event_id"] == "test_event_123"
+        assert result["message"] == "Meeting successfully rescheduled."
+        
+        # Verify patch was called with correct structure
+        mock_service = mock_get_service.return_value
+        patch_call_kwargs = mock_service.events.return_value.patch.call_args.kwargs
+        assert patch_call_kwargs["eventId"] == "test_event_123"
+        assert "start" in patch_call_kwargs["body"]
+        assert "2025-06-16T14:00:00" in patch_call_kwargs["body"]["start"]["dateTime"]
+
+    @patch("main.get_calendar_service")
+    def test_reschedule_with_title(self, mock_get_service):
+        mock_get_service.return_value = _build_mock_service()
+
+        result = reschedule_calendar_event(
+            event_id="test_event_123",
+            new_date_time="2025-06-16T14:00:00",
+            title="Updated Meeting Name",
+        )
+
+        assert result["success"] is True
+        
+        mock_service = mock_get_service.return_value
+        patch_call_kwargs = mock_service.events.return_value.patch.call_args.kwargs
+        assert patch_call_kwargs["body"]["summary"] == "Updated Meeting Name"
+
+    def test_reschedule_missing_id(self):
+        result = reschedule_calendar_event(event_id="", new_date_time="2025-06-16T14:00:00")
+        assert result["success"] is False
+        assert "No event_id" in result["error"]
+
+    @patch("main.get_calendar_service")
+    def test_cancel_success(self, mock_get_service):
+        mock_get_service.return_value = _build_mock_service()
+
+        result = cancel_calendar_event(event_id="test_event_123")
+
+        assert result["success"] is True
+        assert result["message"] == "Meeting successfully cancelled."
+        
+        # Verify delete was called with correct event_id
+        mock_service = mock_get_service.return_value
+        delete_call_kwargs = mock_service.events.return_value.delete.call_args.kwargs
+        assert delete_call_kwargs["eventId"] == "test_event_123"
+
+    def test_cancel_missing_id(self):
+        result = cancel_calendar_event(event_id="")
+        assert result["success"] is False
+        assert "No event_id" in result["error"]
+
 # ── Tests: Webhook Dispatch ──────────────────────────────────────────────────
 
+@patch("main.VAPI_WEBHOOK_SECRET", "")
 class TestWebhookDispatch:
     """Test the /vapi/webhook endpoint with various message types."""
 

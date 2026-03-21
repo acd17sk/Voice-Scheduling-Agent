@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import re
 import shutil
 import secrets
 import urllib.request
@@ -123,9 +124,19 @@ def main():
     try:
         with open(index_path, "r") as f:
             html = f.read()
-            
-        html = html.replace("YOUR_VAPI_PUBLIC_KEY", vapi_public_key)
-        html = html.replace("YOUR_VAPI_ASSISTANT_ID", assistant_id)
+        
+        # Use regex to replace the key/ID values regardless of what's currently there
+        # This works on first run (placeholder) AND on re-runs (old real values)
+        html = re.sub(
+            r'const VAPI_PUBLIC_KEY = "[^"]*"',
+            f'const VAPI_PUBLIC_KEY = "{vapi_public_key}"',
+            html
+        )
+        html = re.sub(
+            r'const VAPI_ASSISTANT_ID = "[^"]*"',
+            f'const VAPI_ASSISTANT_ID = "{assistant_id}"',
+            html
+        )
         
         with open(index_path, "w") as f:
             f.write(html)

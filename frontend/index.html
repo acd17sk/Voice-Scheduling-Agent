@@ -244,40 +244,6 @@
     }
     .feature-icon svg { width: 16px; height: 16px; stroke: var(--accent); fill: none; }
 
-    /* ── Transcript panel ─────────────────────────────────────── */
-    .transcript-panel {
-      display: none;
-      margin-top: 2rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.2rem 1.5rem;
-      max-width: 520px;
-      width: 100%;
-      align-self: center;
-      max-height: 200px;
-      overflow-y: auto;
-    }
-    .transcript-panel.visible { display: block; }
-    .transcript-panel h3 {
-      font-size: 0.72rem;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--text-dim);
-      margin-bottom: 0.8rem;
-    }
-    .transcript-line {
-      font-size: 0.85rem;
-      line-height: 1.5;
-      color: var(--text);
-      padding: 0.3rem 0;
-    }
-    .transcript-line .role {
-      font-weight: 600;
-      color: var(--accent);
-    }
-    .transcript-line .role.user { color: var(--amber); }
-
     /* ── Animations ────────────────────────────────────────────── */
     @keyframes fadeInUp {
       from { opacity: 0; transform: translateY(16px); }
@@ -349,12 +315,6 @@
       </div>
 
       <div class="status" id="status"></div>
-
-      <!-- Live transcript -->
-      <div class="transcript-panel" id="transcriptPanel">
-        <h3>Live Transcript</h3>
-        <div id="transcriptBody"></div>
-      </div>
     </section>
 
     <!-- Features -->
@@ -389,12 +349,13 @@
   <!-- ═══════════════════════════════════════════════════════════
        Vapi Web SDK
        ═══════════════════════════════════════════════════════════ -->
-  <script src="https://cdn.jsdelivr.net/npm/@vapi-ai/web@latest/dist/vapi.min.js"></script>
-  <script>
+  <script type="module">
+    import Vapi from "https://esm.sh/@vapi-ai/web";
+
     // ── Configuration ────────────────────────────────────────────
     // Replace these with your actual keys from the Vapi dashboard
-    const VAPI_PUBLIC_KEY = "YOUR_VAPI_PUBLIC_KEY";
-    const VAPI_ASSISTANT_ID = "YOUR_VAPI_ASSISTANT_ID";
+    const VAPI_PUBLIC_KEY = "d1fafb93-1767-4525-ab16-aab2fd92baf9";
+    const VAPI_ASSISTANT_ID = "d0a6fc74-53d1-4ea2-b681-b0725646f92c";
 
     // ── State ────────────────────────────────────────────────────
     let vapi = null;
@@ -406,13 +367,11 @@
     const btnIcon = document.getElementById("btnIcon");
     const waveform = document.getElementById("waveform");
     const statusEl = document.getElementById("status");
-    const transcriptPanel = document.getElementById("transcriptPanel");
-    const transcriptBody = document.getElementById("transcriptBody");
 
     // ── Initialize Vapi ──────────────────────────────────────────
     function initVapi() {
       if (vapi) return;
-      vapi = new window.Vapi(VAPI_PUBLIC_KEY);
+      vapi = new Vapi(VAPI_PUBLIC_KEY);
 
       vapi.on("call-start", () => {
         setActive(true);
@@ -432,12 +391,6 @@
         setStatus("Listening…");
       });
 
-      vapi.on("message", (msg) => {
-        if (msg.type === "transcript") {
-          addTranscript(msg.role, msg.transcript);
-        }
-      });
-
       vapi.on("error", (err) => {
         console.error("Vapi error:", err);
         setStatus("An error occurred. Please try again.");
@@ -446,7 +399,7 @@
     }
 
     // ── Toggle Call ──────────────────────────────────────────────
-    async function toggleCall() {
+    window.toggleCall = async function toggleCall() {
       initVapi();
 
       if (isCallActive) {
@@ -456,8 +409,11 @@
         setStatus("Connecting…");
         try {
           const callerTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          const today = new Date().toLocaleDateString('en-US', {
+            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+          });
           await vapi.start(VAPI_ASSISTANT_ID, {
-            variableValues: { timezone: callerTimezone },
+            variableValues: { timezone: callerTimezone, currentDate: today },
           });
         } catch (e) {
           console.error("Failed to start:", e);
@@ -472,7 +428,6 @@
       callBtn.classList.toggle("active", active);
       btnLabel.textContent = active ? "End Call" : "Start Call";
       waveform.classList.toggle("visible", active);
-      transcriptPanel.classList.toggle("visible", active);
 
       if (active) {
         btnIcon.innerHTML = `<rect x="6" y="6" width="12" height="12" rx="1"/>`;
@@ -483,17 +438,6 @@
 
     function setStatus(text) {
       statusEl.textContent = text;
-    }
-
-    function addTranscript(role, text) {
-      if (!text || !text.trim()) return;
-      const line = document.createElement("div");
-      line.className = "transcript-line";
-      const label = role === "user" ? "You" : "Nova";
-      const roleClass = role === "user" ? "user" : "assistant";
-      line.innerHTML = `<span class="role ${roleClass}">${label}:</span> ${text}`;
-      transcriptBody.appendChild(line);
-      transcriptPanel.scrollTop = transcriptPanel.scrollHeight;
     }
   </script>
 

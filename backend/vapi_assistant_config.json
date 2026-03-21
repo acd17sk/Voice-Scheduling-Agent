@@ -1,78 +1,137 @@
 {
-  "name": "Scheduling Assistant",
+  "name": "Novabot",
   "model": {
     "provider": "groq",
-    "model": "llama-3.3-70b-versatile",
-    "temperature": 0.4,
-    "systemPrompt": "You are a friendly, professional scheduling assistant named Nova. Your job is to help callers book meetings on their calendar.\n\n## Caller Context\nThe caller is located in the {{timezone}} timezone. Always assume dates and times they give are relative to that timezone. When calling functions, pass the timezone parameter as '{{timezone}}'.\n\n## Conversation Flow\n1. **Greet** the caller warmly and ask for their name.\n2. Ask what **date and time** they'd like to schedule the meeting.\n3. Optionally ask for a **meeting title** (if they don't provide one, use 'Meeting with [Name]').\n4. **Confirm** all the details back to the caller clearly.\n5. Once confirmed, call the `schedule_meeting` function to book it.\n6. Tell the caller the meeting has been booked and wish them a great day.\n\n## Rules\n- Keep responses short and conversational (1-2 sentences).\n- Always confirm the full date, time, and title before scheduling.\n- If the caller says a relative date like 'tomorrow' or 'next Monday', resolve it relative to today.\n- If anything is unclear, ask a clarifying question.\n- Be warm, efficient, and human — not robotic.\n- Default meeting duration is 30 minutes unless told otherwise."
+    "model": "openai/gpt-oss-120b",
+    "temperature": 0.15,
+    "systemPrompt": "You are a friendly, professional scheduling assistant named Nova. Your job is to help callers book meetings on their calendar.\n\n## Caller Context\nToday's date is {{currentDate}}. The caller is located in the {{timezone}} timezone. Always assume dates and times they give are relative to that timezone. When calling functions, pass the timezone parameter as '{{timezone}}'.\n\n## Conversation Flow\n1. **Greet** the caller warmly and ask for their name.\n2. Ask what **date and time** they'd like to schedule the meeting.\n3. Optionally ask for a **meeting title** (if they don't provide one, use 'Meeting with [Name]').\n4. **Confirm** all the details back to the caller clearly.\n5. Once confirmed, call the `schedule_meeting` function to book it.\n6. Tell the caller the meeting has been booked and ask if they need help with anything else.\n7. Wait for the user to explicitly state they are finished before saying goodbye.\n\n## Rules\n- Keep responses short and conversational (1-2 sentences).\n- Always confirm the full date, time, and title before scheduling.\n- If you successfully book a meeting, you will receive an `event_id`.\n- If the user changes their mind and wants to move a meeting OR change its title, DO NOT use `schedule_meeting` again to create a duplicate. Use the `reschedule_meeting` tool and pass the `event_id`. If they only want to change the title, pass the original date and time along with the new `title`.\n- If the user wants to cancel a meeting you just booked, use `cancel_meeting` and pass the `event_id`.\n- The user can book meetings for ANY valid calendar date in the future (e.g., 'March 25th', 'Next Friday', 'May 10th').\n- IMPORTANT: The speech-to-text transcriber sometimes makes phonetic errors (e.g., transcribing '25th' as '20 fifth', or 'March' as 'Mark'). Intelligently interpret these phonetic mistakes as the intended date. NEVER correct the user or argue about how a date is spelled or formatted.\n- Assume the user knows the correct date. Accept their requested date as valid and proceed with booking.\n- Use today's date ({{currentDate}}) to calculate the exact calendar day for relative dates like 'tomorrow' or 'next week'.\n- Always pass dates to functions in full ISO 8601 format (e.g. '2026-03-25T15:00:00').\n- You can ONLY reschedule or cancel meetings that YOU booked during this current call. You do NOT have the ability to look up, modify, or delete pre-existing meetings on the user's calendar. If asked, politely explain this limitation.\n- NEVER end the call immediately after booking a meeting. After a request is completed, ask the user if they need help with anything else. If they don't need any further assistance, then say goodbye and hang up, **End the Call**.\n- If anything is unclear, ask a clarifying question.\n- Be warm, efficient, and human — not robotic.\n- Default meeting duration is 30 minutes unless told otherwise.\n\n## Examples\nAssume Today's date is Friday, October 5, 2026:\n\nUser: \"Let's meet on October13th at 3 PM.\"\nNova: \"Perfect, I will schedule that for October 13th at 3 PM.\"\n(Nova calls schedule_meeting with date_time=\"2026-10-13T15:00:00\")\n\nUser: \"How about tomorrow at 10 AM?\"\nNova: \"Sounds good, I'll book it for tomorrow, March 6th, at 10 AM.\"\n(Nova calls schedule_meeting with date_time=\"2026-10-06T10:00:00\")\n\nUser: \"Let's do the 13th.\"\nNova: \"Just to confirm, do you mean October 13th?\"",
+    "functions": [
+      {
+        "name": "schedule_meeting",
+        "description": "Create a calendar event once the user has confirmed all meeting details.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "The caller's name"
+            },
+            "date_time": {
+              "type": "string",
+              "description": "The date and time for the meeting in ISO 8601 format (e.g., '2026-03-25T15:00:00')"
+            },
+            "title": {
+              "type": "string",
+              "description": "Optional meeting title. If not provided, defaults to 'Meeting with [name]'"
+            },
+            "duration_minutes": {
+              "type": "integer",
+              "description": "Meeting duration in minutes. Defaults to 30."
+            },
+            "timezone": {
+              "type": "string",
+              "description": "The caller's IANA timezone (e.g. 'America/New_York'). Use the value from {{timezone}}."
+            }
+          },
+          "required": ["name", "date_time"]
+        }
+      },
+      {
+        "name": "check_availability",
+        "description": "Check if a particular time slot is available on the calendar.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "date_time": {
+              "type": "string",
+              "description": "The date and time to check availability for in ISO 8601 format."
+            },
+            "duration_minutes": {
+              "type": "integer",
+              "description": "Duration in minutes to check (default 30)."
+            },
+            "timezone": {
+              "type": "string",
+              "description": "The caller's IANA timezone (e.g. 'America/New_York'). Use the value from {{timezone}}."
+            }
+          },
+          "required": ["date_time"]
+        }
+      },
+      {
+        "name": "reschedule_meeting",
+        "description": "Change the time of a meeting that you just booked. Requires the event_id from the original booking.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "event_id": {
+              "type": "string",
+              "description": "The unique event ID returned when the meeting was originally scheduled."
+            },
+            "new_date_time": {
+              "type": "string",
+              "description": "The new requested date and time in ISO 8601 format."
+            },
+            "title": {
+              "type": "string",
+              "description": "Optional new meeting title."
+            },
+            "duration_minutes": {
+              "type": "integer",
+              "description": "Duration in minutes (default 30)."
+            },
+            "timezone": {
+              "type": "string",
+              "description": "The caller's IANA timezone."
+            }
+          },
+          "required": ["event_id", "new_date_time"]
+        }
+      },
+      {
+        "name": "cancel_meeting",
+        "description": "Delete or cancel a meeting that you just booked. Requires the event_id from the original booking.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "event_id": {
+              "type": "string",
+              "description": "The unique event ID of the meeting to cancel."
+            }
+          },
+          "required": ["event_id"]
+        }
+      }
+    ]
   },
   "voice": {
     "provider": "11labs",
     "voiceId": "21m00Tcm4TlvDq8ikWAM"
   },
-  "functions": [
-    {
-      "name": "schedule_meeting",
-      "description": "Create a calendar event once the user has confirmed all meeting details.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "The caller's name"
-          },
-          "date_time": {
-            "type": "string",
-            "description": "The date and time for the meeting in ISO 8601 format or natural language (e.g., '2025-01-15T14:00:00' or 'January 15 2025 at 2pm')"
-          },
-          "title": {
-            "type": "string",
-            "description": "Optional meeting title. If not provided, defaults to 'Meeting with [name]'"
-          },
-          "duration_minutes": {
-            "type": "integer",
-            "description": "Meeting duration in minutes. Defaults to 30."
-          },
-          "timezone": {
-            "type": "string",
-            "description": "The caller's IANA timezone (e.g. 'America/New_York'). Use the value from {{timezone}}."
-          }
-        },
-        "required": ["name", "date_time"]
-      }
-    },
-    {
-      "name": "check_availability",
-      "description": "Check if a particular time slot is available on the calendar.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "date_time": {
-            "type": "string",
-            "description": "The date and time to check availability for."
-          },
-          "duration_minutes": {
-            "type": "integer",
-            "description": "Duration in minutes to check (default 30)."
-          },
-          "timezone": {
-            "type": "string",
-            "description": "The caller's IANA timezone (e.g. 'America/New_York'). Use the value from {{timezone}}."
-          }
-        },
-        "required": ["date_time"]
-      }
-    }
-  ],
   "serverUrl": "YOUR_BACKEND_URL/vapi/webhook",
   "firstMessage": "Hey there! I'm Nova, your scheduling assistant. I'd love to help you book a meeting. What's your name?",
-  "endCallMessage": "Your meeting is all set! Have a wonderful day. Goodbye!",
+  "endCallMessage": "All done! Have a wonderful day. Goodbye!",
   "transcriber": {
     "provider": "deepgram",
     "model": "nova-2",
-    "language": "en"
+    "language": "en",
+    "smartFormat": true
   },
   "silenceTimeoutSeconds": 30,
   "maxDurationSeconds": 300,
-  "endCallFunctionEnabled": true
+  "startSpeakingPlan": {
+    "smartEndpointingEnabled": true,
+    "waitSeconds": 1.5,
+    "transcriptionEndpointingPlan": {
+      "onNoPunctuationSeconds": 2.5,
+      "onNumberSeconds": 2.0
+    }
+  },
+  "stopSpeakingPlan": {
+    "numWords": 0,
+    "voiceSeconds": 0.2,
+    "backoffSeconds": 0.5
+  },
+  "endCallFunctionEnabled": true,
+  "serverMessages": ["tool-calls", "status-update", "end-of-call-report", "transcript"]
 }

@@ -8,6 +8,13 @@ import json
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load .env file from the project root (one level up from backend/)
+_env_path = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(_env_path)
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -195,6 +202,89 @@ def check_calendar_availability(
         return {"available": False, "error": str(e)}
 
 
+def reschedule_calendar_event(
+    event_id: str,
+    new_date_time: str,
+    duration_minutes: int = 30,
+    timezone: str = DEFAULT_TIMEZONE,
+    title: Optional[str] = None,
+) -> dict:
+    """
+    Reschedule an existing Google Calendar event.
+    Updates the start and end times while leaving other details intact.
+    """
+    try:
+        if not event_id:
+            return {"success": False, "error": "No event_id provided."}
+
+        # Parse the new date/time string
+        try:
+            dt = dateparser.parse(new_date_time)
+        except (ParserError, ValueError):
+            dt = None
+        if dt is None:
+            return {"success": False, "error": f"Could not parse new date/time: {new_date_time}"}
+
+        # Localize timezone
+        if dt.tzinfo is None:
+            tz = pytz.timezone(timezone)
+            dt = tz.localize(dt)
+
+        end_dt = dt + timedelta(minutes=duration_minutes)
+
+        service = get_calendar_service()
+        primary_calendar_id = CALENDAR_IDS[0]
+
+        # Use patch to update only specific fields
+        event_body: dict = {
+            "start": {"dateTime": dt.isoformat(), "timeZone": timezone},
+            "end": {"dateTime": end_dt.isoformat(), "timeZone": timezone},
+        }
+        
+        if title:
+            event_body["summary"] = title
+
+        event = service.events().patch(calendarId=primary_calendar_id, eventId=event_id, body=event_body).execute()
+        logger.info(f"✅ Event rescheduled: {event.get('htmlLink')}")
+
+        return {
+            "success": True,
+            "event_id": event["id"],
+            "event_link": event.get("htmlLink", ""),
+            "start": event["start"]["dateTime"],
+            "end": event["end"]["dateTime"],
+            "message": "Meeting successfully rescheduled."
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Reschedule error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def cancel_calendar_event(event_id: str) -> dict:
+    """
+    Delete an existing Google Calendar event.
+    """
+    try:
+        if not event_id:
+            return {"success": False, "error": "No event_id provided."}
+
+        service = get_calendar_service()
+        primary_calendar_id = CALENDAR_IDS[0]
+
+        service.events().delete(calendarId=primary_calendar_id, eventId=event_id).execute()
+        logger.info(f"✅ Event cancelled: {event_id}")
+
+        return {
+            "success": True,
+            "message": "Meeting successfully cancelled."
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Cancellation error: {e}")
+        return {"success": False, "error": str(e)}
+
+
 # ── Health Check ─────────────────────────────────────────────────────────────
 @app.get("/")
 async def root():
@@ -204,6 +294,65 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
+
+
+# ── Function Dispatcher ──────────────────────────────────────────────────────
+
+def _handle_function(fn_name: str, fn_params: dict) -> dict:
+    """Dispatch a function call by name and return the result dict."""
+    if fn_name == "schedule_meeting":
+        name = fn_params.get("name", "Guest")
+        date_time = fn_params.get("date_time", "")
+        title = fn_params.get("title", None)
+        duration = fn_params.get("duration_minutes", 30)
+        timezone = fn_params.get("timezone", DEFAULT_TIMEZONE)
+
+        if not date_time:
+            return {"success": False, "error": "No date/time provided."}
+        return create_calendar_event(
+            name=name,
+            date_time=date_time,
+            title=title,
+            duration_minutes=duration,
+            timezone=timezone,
+        )
+
+    elif fn_name == "check_availability":
+        date_time = fn_params.get("date_time", "")
+        duration = fn_params.get("duration_minutes", 30)
+        timezone = fn_params.get("timezone", DEFAULT_TIMEZONE)
+
+        if not date_time:
+            return {"available": False, "error": "No date/time provided."}
+        return check_calendar_availability(
+            date_time=date_time,
+            duration_minutes=duration,
+            timezone=timezone,
+        )
+
+    elif fn_name == "reschedule_meeting":
+        event_id = fn_params.get("event_id", "")
+        new_date_time = fn_params.get("new_date_time", "")
+        duration = fn_params.get("duration_minutes", 30)
+        timezone = fn_params.get("timezone", DEFAULT_TIMEZONE)
+        title = fn_params.get("title", None)
+
+        if not new_date_time:
+            return {"success": False, "error": "No new date/time provided."}
+        return reschedule_calendar_event(
+            event_id=event_id,
+            new_date_time=new_date_time,
+            duration_minutes=duration,
+            timezone=timezone,
+            title=title,
+        )
+
+    elif fn_name == "cancel_meeting":
+        event_id = fn_params.get("event_id", "")
+        return cancel_calendar_event(event_id=event_id)
+
+    else:
+        return {"error": f"Unknown function: {fn_name}"}
 
 
 # ── Vapi Webhook Endpoint ────────────────────────────────────────────────────
@@ -228,61 +377,58 @@ async def vapi_webhook(request: Request):
     message_type = payload.get("message", {}).get("type", "")
     logger.info(f"📩 Vapi webhook received: type={message_type}")
 
-    # ── Handle function-call ─────────────────────────────────────────────
+    # ── Handle function-call (legacy Vapi format) ─────────────────────────
     if message_type == "function-call":
         function_call = payload["message"].get("functionCall", {})
         fn_name = function_call.get("name", "")
         fn_params = function_call.get("parameters", {})
 
         logger.info(f"🔧 Function call: {fn_name} with params: {json.dumps(fn_params)}")
+        result = _handle_function(fn_name, fn_params)
+        return JSONResponse(content={"result": json.dumps(result)})
 
-        if fn_name == "schedule_meeting":
-            name = fn_params.get("name", "Guest")
-            date_time = fn_params.get("date_time", "")
-            title = fn_params.get("title", None)
-            duration = fn_params.get("duration_minutes", 30)
-            timezone = fn_params.get("timezone", DEFAULT_TIMEZONE)
+    # ── Handle tool-calls (current Vapi format) ──────────────────────────
+    if message_type == "tool-calls":
+        tool_call_list = payload["message"].get("toolCallList", [])
+        results = []
 
-            if not date_time:
-                result = {"success": False, "error": "No date/time provided."}
-            else:
-                result = create_calendar_event(
-                    name=name,
-                    date_time=date_time,
-                    title=title,
-                    duration_minutes=duration,
-                    timezone=timezone,
-                )
+        for tool_call in tool_call_list:
+            tool_call_id = tool_call.get("id", "")
+            function_info = tool_call.get("function", {})
+            fn_name = function_info.get("name", "")
 
-            return JSONResponse(content={"result": json.dumps(result)})
+            # arguments can be a JSON string or a dict
+            fn_args = function_info.get("arguments", {})
+            if isinstance(fn_args, str):
+                try:
+                    fn_args = json.loads(fn_args)
+                except json.JSONDecodeError:
+                    fn_args = {}
 
-        elif fn_name == "check_availability":
-            date_time = fn_params.get("date_time", "")
-            duration = fn_params.get("duration_minutes", 30)
-            timezone = fn_params.get("timezone", DEFAULT_TIMEZONE)
+            logger.info(f"🔧 Tool call [{tool_call_id}]: {fn_name} with params: {json.dumps(fn_args)}")
+            result = _handle_function(fn_name, fn_args)
+            results.append({
+                "toolCallId": tool_call_id,
+                "result": json.dumps(result),
+            })
 
-            if not date_time:
-                result = {"available": False, "error": "No date/time provided."}
-            else:
-                result = check_calendar_availability(
-                    date_time=date_time,
-                    duration_minutes=duration,
-                    timezone=timezone,
-                )
-
-            return JSONResponse(content={"result": json.dumps(result)})
-
-        else:
-            return JSONResponse(
-                content={"result": json.dumps({"error": f"Unknown function: {fn_name}"})}
-            )
+        return JSONResponse(content={"results": results})
 
     # ── Handle other event types (status-update, transcript, etc.) ───────
     if message_type == "status-update":
         status = payload["message"].get("status", "")
         logger.info(f"📊 Call status: {status}")
 
-    if message_type == "end-of-call-report":
+    elif message_type == "transcript":
+        msg_data = payload.get("message", {})
+        role = msg_data.get("role", "unknown")
+        transcript = msg_data.get("transcript", "")
+        if role == "user":
+            logger.info(f"🗣️ YOU: {transcript}")
+        elif role == "assistant":
+            logger.info(f"🤖 NOVA: {transcript}")
+
+    elif message_type == "end-of-call-report":
         logger.info("📞 Call ended.")
         summary = payload["message"].get("summary", "No summary.")
         logger.info(f"📝 Summary: {summary}")
