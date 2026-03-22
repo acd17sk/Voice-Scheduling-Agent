@@ -104,6 +104,11 @@
       }
     ]
   },
+  "backgroundSpeechDenoisingPlan": {
+    "smartDenoisingPlan": {
+      "enabled": true
+    }
+  },
   "voice": {
     "provider": "11labs",
     "voiceId": "21m00Tcm4TlvDq8ikWAM"
@@ -129,8 +134,8 @@
   },
   "stopSpeakingPlan": {
     "numWords": 0,
-    "voiceSeconds": 0.2,
-    "backoffSeconds": 0.5
+    "voiceSeconds": 0.4,
+    "backoffSeconds": 1.0
   },
   "endCallFunctionEnabled": true,
   "serverMessages": ["tool-calls", "status-update", "end-of-call-report", "transcript"]
