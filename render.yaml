@@ -1,5 +1,6 @@
 services:
   - type: web
+    plan: free
     name: voice-scheduler-backend
     runtime: python
     buildCommand: pip install -r requirements.txt
