@@ -1,15 +1,23 @@
 services:
   - type: web
-    plan: free
     name: voice-scheduler-backend
     runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     rootDir: backend
     envVars:
+      # Google Calendar
       - key: GOOGLE_SERVICE_ACCOUNT_JSON
         sync: false
       - key: GOOGLE_CALENDAR_ID
         sync: false
       - key: DEFAULT_TIMEZONE
         value: America/New_York
+      
+      # Vapi (Added these)
+      - key: VAPI_API_KEY
+        sync: false
+      - key: VAPI_PUBLIC_KEY
+        sync: false
+      - key: VAPI_WEBHOOK_SECRET
+        sync: false
