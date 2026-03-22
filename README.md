@@ -2,7 +2,9 @@
 
 A real-time voice assistant that books meetings on Google Calendar through natural conversation.
 
-**Talk to Nova → She collects your name, date/time, and title → Confirms availability → Books it.**
+**Talk to Nova → She collects your name, date/time, and title → Confirms availability → Books the meeting.**
+
+**During the same conversation, you can also ask Nova to reschedule or cancel this meeting (but she cannot modify or delete any other meetings on the calendar not booked in this call session).**
 
 ---
 
@@ -17,7 +19,7 @@ If someone has sent you a link to Nova (e.g. `https://YOUR_USERNAME.github.io/vo
    - Nova will greet you and ask for your name.
    - Tell her what day and time works for you. Nova automatically detects your local timezone, so saying *"Tomorrow at 3pm"* works perfectly!
    - You can optionally provide a meeting title, like *"Let's schedule a Sync regarding the new project for next Tuesday at 10 AM."*
-5. **Confirmation**: Nova will read back the details. Once you say "Yes", the meeting is instantly booked on the calendar!
+5. **Confirmation**: Nova will read back the details. Once you say "Yes", the meeting is instantly booked on the calendar! You can also ask Nova to reschedule or cancel the meeting she just created during the same conversation.
 
 ---
 
@@ -84,7 +86,12 @@ ngrok http 8000
 *Note: If you didn't provide your ngrok URL during `init.py`, you will need to manually update the `serverUrl` in your Vapi dashboard to your new `https://xxx.ngrok-free.app/vapi/webhook` URL.*
 
 **3. Open the Frontend:**
-Simply double-click `frontend/index.html` to open it in your browser. Click "Start Call" and talk to Nova!
+Open a third terminal window, navigate to the frontend folder, and run a local server:
+```bash
+cd frontend
+python -m http.server 3000
+```
+Then open your browser to `http://localhost:3000` and click "Start Call" to talk to Nova!
 
 ---
 
@@ -94,21 +101,23 @@ Once you are happy with how Nova works locally, you can deploy her so she is ava
 
 ### 1. Backend (Render / Railway)
 1. Push your code repository to GitHub.
-2. Log into [render.com](https://render.com) and create a **New Web Service**.
-3. Connect your GitHub repository and use these settings:
+2. Log into [render.com](https://render.com) and create a **Blueprint**.
+3. Connect your GitHub repository and use these settings (automaticallly executed):
    - **Root Directory**: `backend`
    - **Build Command**: `pip install -r requirements.txt`
    - **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
 4. **Environment Variables**:
    - Copy all the variables from your local `.env` file into Render's environment variables.
-   - For `GOOGLE_SERVICE_ACCOUNT_JSON`, paste the entire raw contents of your JSON file as a single string.
-5. **Update Vapi**: Once Render gives you a live URL (e.g., `https://nova.onrender.com`), go to your Vapi dashboard and update your assistant's `serverUrl` to `https://nova.onrender.com/vapi/webhook`.
+   - For `GOOGLE_SERVICE_ACCOUNT_JSON`, paste the entire content of your JSON file as a single string.
+5. **Update Vapi**: Once Render gives you a live URL (e.g., `https://nova.onrender.com`), go to your Vapi dashboard and update your assistant's `serverUrl` to the **live URL** + `/vapi/webhook` (e.g.,`https://nova.onrender.com/vapi/webhook`).
 
 ### 2. Frontend (GitHub Pages)
 1. In your GitHub repository settings, go to **Pages**.
-2. Under "Build and deployment", set Source to **Deploy from branch**.
-3. Select the `main` branch and the `/frontend` folder.
-4. Save. Your agent is now live permanently at `https://YOUR_USERNAME.github.io/voice-scheduling-agent/`!
+2. Under "Build and deployment", change the Source dropdown from **"Deploy from a branch"** to **"GitHub Actions"**.
+3. GitHub will show several "Suggested workflows." Look for **"Static HTML"** and click **Configure**.
+4. An editor will open with a file named `static.yml`. Look for the section that says `path: '.'` (usually under the `upload-pages-artifact` step).
+5. Change it to: `path: './frontend'`.
+6. Click **Commit changes** in the top right. Your agent is now live permanently at `https://YOUR_USERNAME.github.io/voice-scheduling-agent/`!
 
 ---
 
