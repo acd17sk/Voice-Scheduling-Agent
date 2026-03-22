@@ -29,7 +29,7 @@ Want to deploy your own Nova assistant? Our architecture ensures a seamless, ent
 
 ### Architecture & Features
 * **Voice Orchestrator**: [Vapi.ai](https://vapi.ai) handles WebRTC, Voice Activity Detection, interruptions, and streaming.
-* **LLM**: Groq (Llama 3.3 70B) for ultra-low latency conversational intelligence.
+* **LLM**: Groq (GPT OSS 120B) for ultra-low latency conversational intelligence.
 * **Serverless Calendar Auth**: Uses Google Service Accounts, so there is no clunky OAuth login screen for your users.
 * **Timezone Injection**: The frontend detects the caller's timezone and passes it to the agent so times are always resolved accurately.
 * **Race Condition Protection**: The backend silently re-checks your calendar availability milliseconds before booking to prevent double-booking.
